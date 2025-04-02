@@ -1,107 +1,83 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import type React from "react"
+import Image from "next/image"
+import { useDispatch, useSelector } from "react-redux"
 import type { WeatherData } from "@/redux/features/weatherSlice"
-import { useTheme } from "next-themes"
+import type { RootState } from "@/redux/store"
+import { toggleFavoriteCity } from "@/redux/features/preferencesSlice"
+import { Card, CardContent } from "@/components/ui/card"
+import { Star } from "lucide-react"
+import Link from "next/link"
 
-interface WeatherChartProps {
-  data: WeatherData[]
+interface WeatherCardProps {
+  data: WeatherData
 }
 
-export default function WeatherChart({ data }: WeatherChartProps) {
-  const chartRef = useRef<HTMLCanvasElement>(null)
-  const { theme } = useTheme()
+export default function WeatherCard({ data }: WeatherCardProps) {
+  const dispatch = useDispatch()
+  const favoriteWeatherCities = useSelector((state: RootState) => state.preferences.favoriteWeatherCities)
+  const isFavorite = favoriteWeatherCities.includes(data.city)
 
-  useEffect(() => {
-    if (!chartRef.current || data.length === 0) return
+  const handleToggleFavorite = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dispatch(toggleFavoriteCity(data.city))
+  }
 
-    const ctx = chartRef.current.getContext("2d")
-    if (!ctx) return
-
-    // Clear canvas
-    ctx.clearRect(0, 0, chartRef.current.width, chartRef.current.height)
-
-    // Sort data by timestamp
-    const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp)
-
-    // Extract temperatures and dates
-    const temperatures = sortedData.map((item) => item.temperature)
-    const dates = sortedData.map((item) => new Date(item.timestamp).toLocaleDateString())
-
-    // Calculate chart dimensions
-    const width = chartRef.current.width
-    const height = chartRef.current.height
-    const padding = 40
-    const chartWidth = width - padding * 2
-    const chartHeight = height - padding * 2
-
-    // Calculate scales
-    const maxTemp = Math.max(...temperatures) + 5
-    const minTemp = Math.min(...temperatures) - 5
-    const tempRange = maxTemp - minTemp
-
-    // Set colors based on theme
-    const textColor = theme === "dark" ? "#e5e7eb" : "#374151"
-    const gridColor = theme === "dark" ? "#374151" : "#e5e7eb"
-    const lineColor = "#3b82f6"
-
-    // Draw grid
-    ctx.strokeStyle = gridColor
-    ctx.lineWidth = 0.5
-
-    // Draw horizontal grid lines
-    for (let i = 0; i <= 5; i++) {
-      const y = padding + (chartHeight / 5) * i
-      ctx.beginPath()
-      ctx.moveTo(padding, y)
-      ctx.lineTo(width - padding, y)
-      ctx.stroke()
-
-      // Draw temperature labels
-      const temp = maxTemp - (tempRange / 5) * i
-      ctx.fillStyle = textColor
-      ctx.font = "12px sans-serif"
-      ctx.textAlign = "right"
-      ctx.fillText(`${temp.toFixed(1)}°C`, padding - 10, y + 4)
-    }
-
-    // Draw line chart
-    ctx.strokeStyle = lineColor
-    ctx.lineWidth = 2
-    ctx.beginPath()
-
-    sortedData.forEach((item, index) => {
-      const x = padding + (chartWidth / (sortedData.length - 1)) * index
-      const y = padding + chartHeight - ((item.temperature - minTemp) / tempRange) * chartHeight
-
-      if (index === 0) {
-        ctx.moveTo(x, y)
-      } else {
-        ctx.lineTo(x, y)
-      }
-
-      // Draw points
-      ctx.fillStyle = lineColor
-      ctx.beginPath()
-      ctx.arc(x, y, 4, 0, Math.PI * 2)
-      ctx.fill()
-
-      // Draw date labels for every other point to avoid crowding
-      if (index % 2 === 0) {
-        ctx.fillStyle = textColor
-        ctx.font = "10px sans-serif"
-        ctx.textAlign = "center"
-        ctx.fillText(dates[index], x, height - 10)
-      }
-    })
-
-    ctx.stroke()
-  }, [data, theme])
+  // Function to determine background color based on temperature
+  const getTemperatureColor = (temp: number) => {
+    if (temp >= 30) return "from-red-400 to-orange-300"
+    if (temp >= 20) return "from-orange-400 to-yellow-300"
+    if (temp >= 10) return "from-yellow-400 to-green-300"
+    if (temp >= 0) return "from-blue-400 to-cyan-300"
+    return "from-blue-500 to-indigo-400"
+  }
 
   return (
-    <div className="w-full h-[300px]">
-      <canvas ref={chartRef} width={800} height={300} className="w-full h-full" />
-    </div>
+    <Link href={`/weather/${encodeURIComponent(data.city)}`}>
+      <Card className="hover:shadow-md transition-all duration-300 border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <CardContent className="p-0">
+          <div className={`bg-gradient-to-r ${getTemperatureColor(data.temperature)} text-white p-4`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-lg">{data.city}</h3>
+                  <span className="text-xs bg-white/30 px-2 py-0.5 rounded-full">{data.country}</span>
+                </div>
+                <div className="mt-2 flex items-center gap-4">
+                  <div className="text-3xl font-bold">{Math.round(data.temperature)}°C</div>
+                  <div className="text-sm">
+                    <div className="font-medium">{data.conditions}</div>
+                    <div className="opacity-80">Humidity: {data.humidity}%</div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end">
+                <button onClick={handleToggleFavorite} className="text-white hover:text-yellow-300 transition-colors">
+                  <Star className={`h-5 w-5 ${isFavorite ? "fill-yellow-300 text-yellow-300" : ""}`} />
+                </button>
+                <div className="w-12 h-12 flex items-center justify-center">
+                  {data.icon && (
+                    <Image
+                      src={`https://openweathermap.org/img/wn/${data.icon}@2x.png`}
+                      alt={data.conditions}
+                      width={50}
+                      height={50}
+                      className="drop-shadow-md"
+                      unoptimized // Add this because it's an external image
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="p-3 text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800">
+            Last updated: {new Date(data.timestamp).toLocaleTimeString()}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   )
 }
 
